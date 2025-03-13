@@ -122,12 +122,13 @@ def detect_text(DIRECTORY: str) -> dict:
         print("Error: Could not locate map text image!")
         sys.exit(1)
 
+    # num_labels, labels = cv2.connectedComponentsWithStats()
     # preprocessing
     img = cv2.imread(text_image_filepath)
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    ret, thresh1 = cv2.threshold(gray, 0, 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY_INV)
-    rect_kernal = cv2.getStructuringElement(cv2.MORPH_RECT, (20, 20))
-    dilation = cv2.dilate(thresh1, rect_kernal, iterations = 1)
+    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY_INV)
+    rect_kernal = cv2.getStructuringElement(cv2.MORPH_CROSS, (12, 12))
+    dilation = cv2.dilate(thresh, rect_kernal, iterations = 1)
     contours, hierarchy = cv2.findContours(dilation, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     copy = img.copy()
 
@@ -135,10 +136,17 @@ def detect_text(DIRECTORY: str) -> dict:
     count = 0
     for cnt in contours:
         x, y, w, h = cv2.boundingRect(cnt)
-        rect = cv2.rectangle(copy, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        x -= 15
+        y -= 10
+        w += 30
+        h += 20
         cropped = copy[y:y + h, x:x + w]
         text = pytesseract.image_to_string(cropped)
         print(f"Found {text.strip()} at ({x}, {y})!")
+        if text != "":
+            rect = cv2.rectangle(copy, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        else:
+            rect = cv2.rectangle(copy, (x, y), (x + w, y + h), (0, 0, 255), 2)
         count += 1
 
     print(f"Total region_ids found: {count}")
@@ -152,10 +160,7 @@ def main():
     print(f"[{datetime.datetime.now()}] Running...")
 
     colors, colored_image = color_map_image(DIRECTORY)
-    colored_image.save(f"{DIRECTORY}/colored.png")
     print(f"[{datetime.datetime.now()}] Map coloring completed!")
-    user_choice = input(f"Hit enter when ready: ")
-
     text_dict = detect_text(DIRECTORY)
 
 if __name__ == "__main__":
