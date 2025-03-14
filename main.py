@@ -2,6 +2,7 @@ import os
 import sys
 import glob
 import random
+import json
 from typing import Tuple
 
 import datetime
@@ -12,6 +13,7 @@ import pytesseract
 
 EXTENSIONS = {'.png', '.PNG'}
 pytesseract.pytesseract.tesseract_cmd = "C:\\Program Files\\Tesseract-OCR\\tesseract.exe"
+custom_config = r"--psm 8"
 
 def check_pixel(px, mode: str, x: int, y: int) -> bool:
     """
@@ -112,45 +114,39 @@ def detect_text(DIRECTORY: str) -> dict:
     
     text_dict = {}
 
-    # locate map image
-    text_image_filepath = None
+    # locate text image
+    text_image = None
     files = glob.glob(os.path.join(DIRECTORY, 'text_3*'))
     for file in files:
         if any(file.endswith(ext) for ext in EXTENSIONS):
-            text_image_filepath = file
-    if text_image_filepath is None:
+            text_image = cv2.imread(file)
+    if text_image is None:
         print("Error: Could not locate map text image!")
         sys.exit(1)
 
-    # num_labels, labels = cv2.connectedComponentsWithStats()
-    # preprocessing
-    img = cv2.imread(text_image_filepath)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    # image dilation
+    gray = cv2.cvtColor(text_image, cv2.COLOR_BGR2GRAY)
     _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY_INV)
-    rect_kernal = cv2.getStructuringElement(cv2.MORPH_CROSS, (12, 12))
-    dilation = cv2.dilate(thresh, rect_kernal, iterations = 1)
-    contours, hierarchy = cv2.findContours(dilation, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    copy = img.copy()
-
+    rect_kernal = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
+    dilation = cv2.dilate(thresh, rect_kernal, iterations=5)
+    copy = text_image.copy()
+    
     # text detection
-    count = 0
-    for cnt in contours:
-        x, y, w, h = cv2.boundingRect(cnt)
-        x -= 15
-        y -= 10
-        w += 30
-        h += 20
-        cropped = copy[y:y + h, x:x + w]
-        text = pytesseract.image_to_string(cropped)
-        print(f"Found {text.strip()} at ({x}, {y})!")
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(dilation)
+    for i in range(1, num_labels):
+        x, y, w, h, area = stats[i]
+        cropped = text_image[y:y+h, x:x+w]
+        text = pytesseract.image_to_string(cropped, config=custom_config)
+        text_dict[text.strip()] = None
         if text != "":
             rect = cv2.rectangle(copy, (x, y), (x + w, y + h), (0, 255, 0), 2)
         else:
             rect = cv2.rectangle(copy, (x, y), (x + w, y + h), (0, 0, 255), 2)
-        count += 1
 
-    print(f"Total region_ids found: {count}")
+    print(f"Total region_ids found: {num_labels}")
     cv2.imwrite("test/copy.png", copy)
+    with open("results.json", "w") as json_file:
+        json.dump(text_dict, json_file, indent=4)
 
     return text_dict
 
@@ -162,6 +158,7 @@ def main():
     colors, colored_image = color_map_image(DIRECTORY)
     print(f"[{datetime.datetime.now()}] Map coloring completed!")
     text_dict = detect_text(DIRECTORY)
+    print(f"[{datetime.datetime.now()}] Text detection completed!")
 
 if __name__ == "__main__":
     main()
