@@ -59,7 +59,7 @@ def generate_node_color(colors: set[tuple], mode: str) -> tuple[tuple, tuple]:
             case 'RGB':
                 border_color = (0, 0, 0)
             case 'RGBA':
-                fill_color.append(random.randint(1, 254))
+                fill_color.append(255)
                 border_color = (0, 0, 0, 255)
         
         fill_color = tuple(fill_color)
@@ -95,7 +95,7 @@ def color_map_image(DIRECTORY: str) -> Tuple[set, Image.Image]:
     Returns:
         tuple:
             set: Set of colors chosen for map regions.
-            Image: Map image represented a Pillow image data type.
+            Image: Colored map image represented a Pillow image data type.
     """
     
     # locate map image
@@ -118,19 +118,20 @@ def color_map_image(DIRECTORY: str) -> Tuple[set, Image.Image]:
             if check_pixel(px, map_image.mode, x, y):
                 fill_color, border_color = generate_node_color(colors, map_image.mode)
                 ImageDraw.floodfill(map_image, (x, y), fill_color, border_color)
+                colors.add(fill_color)
                 px = map_image.load()
 
     return colors, map_image
 
 def detect_text(DIRECTORY: str) -> dict:
     """
-    Utilizes OpenCV and pytesseract to detect map text and build a dict.
+    Utilizes OpenCV and pytesseract to detect map text.
 
     Params:
         DIRECTORY (str): Filepath to directory where map images are located.
     
     Returns:
-        dict: Dictionary of text keys with their centroid values.
+        dict: Dictionary of text keys and their corresponding info.
     """
     
     text_dict = {}
@@ -162,21 +163,75 @@ def detect_text(DIRECTORY: str) -> dict:
 
     return text_dict
 
+def match_text_to_color(text_dict: dict, colors: set, colored_image: Image.Image) ->  Tuple[dict, set]:
+    """
+    Matches each block of text to a colored region.
+
+    Params:
+        text_dict: Dictionary of text keys and their corresponding info.
+        colors: Set of all colors used in color_map_image().
+        colored_image: A copy of the map image with uniquely colored regions.
+
+    Returns:
+        tuple:
+            dict: Dictionary of text keys and their corresponding info.
+            set: All colors that were not matched to a block of text.
+    """
+
+    matched_colors = set()
+    px = colored_image.load()
+
+    for key, value in text_dict.items():
+        x = value["cords"][0]
+        y = value["cords"][1]
+        if px[x, y] in colors:
+            text_dict[key]["color"] = list(px[x, y])
+            matched_colors.add(px[x, y])
+
+    unmatched_colors = colors.difference(matched_colors)
+
+    return text_dict, unmatched_colors
+
+def cleanup(text_dict: dict, unmatched_colors: set):
+    """
+    Prompts user to handle stray text and colors.
+    """
+
+    # check if cleanup is needed
+    unmatched_text = set()
+    for key, value in text_dict.items():
+        if value.get("color") is None:
+            unmatched_text.add(key)
+    if len(unmatched_text) == 0 and len(unmatched_colors) == 0:
+        print("No cleanup required!")
+        return text_dict
+    
+    # handle stray text
+    # TBA
+
+    # handle stray colors
+    # TBA 
+    
+    return text_dict
+
 def main():
 
     DIRECTORY = input("Enter absolute filepath to target directory: ")
-    print(f"[{datetime.datetime.now()}] Running...")
 
+    print(f"[{datetime.datetime.now()}] Coloring map regions...")
     colors, colored_image = color_map_image(DIRECTORY)
-    print(f"[{datetime.datetime.now()}] Map coloring completed!")
 
+    print(f"[{datetime.datetime.now()}] Reading map text...")
     text_dict = detect_text(DIRECTORY)
-    print(f"[{datetime.datetime.now()}] Text detection completed!")
-
-    # match text to color
+    
+    text_dict, unmatched_colors = match_text_to_color(text_dict, colors, colored_image)
+    text_dict = cleanup(text_dict, unmatched_colors)
 
     # construct graph
+    print(f"[{datetime.datetime.now()}] Constructing graph...")
 
+    # save graph
+    print(f"[{datetime.datetime.now()}] Saving...")
     print(f"Total region_ids found: {len(text_dict)}")
     with open(f"{DIRECTORY}/results.json", "w") as json_file:
         json.dump(text_dict, json_file, indent=4)
