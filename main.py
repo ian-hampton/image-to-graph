@@ -69,14 +69,28 @@ def generate_node_color(colors: set[tuple], mode: str) -> tuple[tuple, tuple]:
 
     return fill_color, border_color
 
+def filter_text(text: str) -> str:
+    """
+    Cleans up text detected by pytesseract.
 
-def color_map_image(DIRECTORY: str, export=True) -> Tuple[set, Image.Image]:
+    Params:
+        text (str): Detected text.
+
+    Returns:
+        text: Filtered text.
+    """
+
+    text = text.strip()
+    text = "".join(filter(str.isalnum, text))
+
+    return text
+
+def color_map_image(DIRECTORY: str) -> Tuple[set, Image.Image]:
     """
     Identifies all nodes in an image and colors them a unique color.
     
     Params:
         DIRECTORY (str): Filepath to directory where map images are located.
-        export (bool): Saves colored map image as a new file if set to True.
 
     Returns:
         tuple:
@@ -110,13 +124,20 @@ def color_map_image(DIRECTORY: str, export=True) -> Tuple[set, Image.Image]:
 
 def detect_text(DIRECTORY: str) -> dict:
     """
+    Utilizes OpenCV and pytesseract to detect map text and build a dict.
+
+    Params:
+        DIRECTORY (str): Filepath to directory where map images are located.
+    
+    Returns:
+        dict: Dictionary of text keys with their centroid values.
     """
     
     text_dict = {}
 
     # locate text image
     text_image = None
-    files = glob.glob(os.path.join(DIRECTORY, 'text_3*'))
+    files = glob.glob(os.path.join(DIRECTORY, 'text*'))
     for file in files:
         if any(file.endswith(ext) for ext in EXTENSIONS):
             text_image = cv2.imread(file)
@@ -129,7 +150,6 @@ def detect_text(DIRECTORY: str) -> dict:
     _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_OTSU | cv2.THRESH_BINARY_INV)
     rect_kernal = cv2.getStructuringElement(cv2.MORPH_CROSS, (3, 3))
     dilation = cv2.dilate(thresh, rect_kernal, iterations=5)
-    copy = text_image.copy()
     
     # text detection
     num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(dilation)
@@ -137,16 +157,8 @@ def detect_text(DIRECTORY: str) -> dict:
         x, y, w, h, area = stats[i]
         cropped = text_image[y:y+h, x:x+w]
         text = pytesseract.image_to_string(cropped, config=custom_config)
-        text_dict[text.strip()] = None
-        if text != "":
-            rect = cv2.rectangle(copy, (x, y), (x + w, y + h), (0, 255, 0), 2)
-        else:
-            rect = cv2.rectangle(copy, (x, y), (x + w, y + h), (0, 0, 255), 2)
-
-    print(f"Total region_ids found: {num_labels}")
-    cv2.imwrite("test/copy.png", copy)
-    with open("results.json", "w") as json_file:
-        json.dump(text_dict, json_file, indent=4)
+        text_dict[filter_text(text)] = {}
+        text_dict[filter_text(text)]["cords"] = [int(x + 0.5*w), int(y + 0.5*h)]
 
     return text_dict
 
@@ -157,8 +169,17 @@ def main():
 
     colors, colored_image = color_map_image(DIRECTORY)
     print(f"[{datetime.datetime.now()}] Map coloring completed!")
+
     text_dict = detect_text(DIRECTORY)
     print(f"[{datetime.datetime.now()}] Text detection completed!")
+
+    # match text to color
+
+    # construct graph
+
+    print(f"Total region_ids found: {len(text_dict)}")
+    with open(f"{DIRECTORY}/results.json", "w") as json_file:
+        json.dump(text_dict, json_file, indent=4)
 
 if __name__ == "__main__":
     main()
