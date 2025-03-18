@@ -158,8 +158,10 @@ def detect_text(DIRECTORY: str) -> dict:
         x, y, w, h, area = stats[i]
         cropped = text_image[y:y+h, x:x+w]
         text = pytesseract.image_to_string(cropped, config=custom_config)
-        text_dict[filter_text(text)] = {}
-        text_dict[filter_text(text)]["cords"] = [int(x + 0.5*w), int(y + 0.5*h)]
+        region_id = filter_text(text)
+        text_dict[region_id] = {}
+        text_dict[region_id]["cords"] = [int(x + 0.5*w), int(y + 0.5*h)]
+        text_dict[region_id]["colors"] = []
 
     return text_dict
 
@@ -168,9 +170,9 @@ def match_text_to_color(text_dict: dict, colors: set, colored_image: Image.Image
     Matches each block of text to a colored region.
 
     Params:
-        text_dict: Dictionary of text keys and their corresponding info.
-        colors: Set of all colors used in color_map_image().
-        colored_image: A copy of the map image with uniquely colored regions.
+        text_dict (dict): Dictionary of text keys and their corresponding info.
+        colors (set): Set of all colors used in color_map_image().
+        colored_image (Image): A copy of the map image with uniquely colored regions.
 
     Returns:
         tuple:
@@ -185,32 +187,74 @@ def match_text_to_color(text_dict: dict, colors: set, colored_image: Image.Image
         x = value["cords"][0]
         y = value["cords"][1]
         if px[x, y] in colors:
-            text_dict[key]["color"] = list(px[x, y])
+            text_dict[key]["colors"].append(list(px[x, y]))
             matched_colors.add(px[x, y])
 
     unmatched_colors = colors.difference(matched_colors)
 
     return text_dict, unmatched_colors
 
-def cleanup(text_dict: dict, unmatched_colors: set):
+def cleanup(text_dict: dict, colors: set, unmatched_colors: set) -> dict:
     """
     Prompts user to handle stray text and colors.
+
+    Params:
+        text_dict (dict): Dictionary of text keys and their corresponding info.
+        colors (set): Set of all colors used in color_map_image().
+        unmatched_colors (set): Set of all colors that have not been matched to a region.
+
+    Returns:
+        dict: Dictionary of text keys and their corresponding info.
     """
 
     # check if cleanup is needed
     unmatched_text = set()
     for key, value in text_dict.items():
-        if value.get("color") is None:
+        if value["colors"] == []:
             unmatched_text.add(key)
     if len(unmatched_text) == 0 and len(unmatched_colors) == 0:
-        print("No cleanup required!")
         return text_dict
+
+    # list all unmatched colors
+    if len(unmatched_colors) > 0:
+        print("The following colors have not been matched")
+        for color in unmatched_colors:
+            print(color)
     
+    # list all unmatched text
+    if len(unmatched_text) > 0:
+        print("The following text has not been matched:")
+        for string in unmatched_text:
+            print(string)
+    
+    print("Please handle each unmatched value by manually matching it or skipping it.")
+    print("Temporary files have been saved to your target directory to help with this.")
+
     # handle stray text
-    # TBA
+    for text in unmatched_text:
+        user_choice = input(f"{text} (S/m): ")
+        if user_choice.lower() not in ["m", "match"]:
+            continue
+        while True:
+            color = input("Enter BGR color as a comma-separated list: ")
+            try:
+                color = tuple(val.strip() for val in color.split(","))
+            except:
+                continue
+            if color in colors:
+                text_dict[region_id]["colors"].append(color)
+                break
 
     # handle stray colors
-    # TBA 
+    for color in unmatched_colors:
+        user_choice = input(f"{color} (S/m): ")
+        if user_choice.lower() not in ["m", "match"]:
+            continue
+        while True:
+            region_id = input("Enter region text: ")
+            if region_id in text_dict:
+                text_dict[region_id]["colors"].append(color)
+                break
     
     return text_dict
 
@@ -220,21 +264,24 @@ def main():
 
     print(f"[{datetime.datetime.now()}] Coloring map regions...")
     colors, colored_image = color_map_image(DIRECTORY)
+    colored_image.save(f"{DIRECTORY}/TEMP_MAP.png")
 
     print(f"[{datetime.datetime.now()}] Reading map text...")
     text_dict = detect_text(DIRECTORY)
     
+    print(f"[{datetime.datetime.now()}] Identifying regions...")
     text_dict, unmatched_colors = match_text_to_color(text_dict, colors, colored_image)
-    text_dict = cleanup(text_dict, unmatched_colors)
+    with open(f"{DIRECTORY}/TEMP_RESULTS.json", "w") as json_file:
+        json.dump(text_dict, json_file, indent=4)
+    text_dict = cleanup(text_dict, colors, unmatched_colors)
 
     # construct graph
     print(f"[{datetime.datetime.now()}] Constructing graph...")
 
     # save graph
-    print(f"[{datetime.datetime.now()}] Saving...")
-    print(f"Total region_ids found: {len(text_dict)}")
-    with open(f"{DIRECTORY}/results.json", "w") as json_file:
-        json.dump(text_dict, json_file, indent=4)
+    os.remove(f"{DIRECTORY}/TEMP_MAP.png")
+    os.remove(f"{DIRECTORY}/TEMP_RESULTS.json")
+    print(f"[{datetime.datetime.now()}] Done!") 
 
 if __name__ == "__main__":
     main()
