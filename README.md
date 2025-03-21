@@ -30,6 +30,12 @@ Since this script utilizes Pytesseract, you need to have [Google Tesseract OCR](
         pip install -r requirements.txt
         ```
 
+## Usage
+
+The script will take two images of your map and use them to create a graph, exported as a JSON file.
+1. "map.png" - A blank image of your map with no text or other features.
+2. "text.png" - An image containing all the text on your map.
+
 ## Roadmap
 
 - [ ] Add option to change bresenham circle radius.
