@@ -32,12 +32,12 @@ Since this script utilizes Pytesseract, you need to have [Google Tesseract OCR](
 
 ## Roadmap
 
-- [] Add option to change bresenham circle radius.
-- [] Make the adjacency detection more effecient.
-- [] Add additional save options?
+- [ ] Add option to change bresenham circle radius.
+- [ ] Make the adjacency detection more effecient.
+- [ ] Add additional save options?
 
 ## Contact
 
 Ian Hampton
 
-Project Link: https://github.com/ian-hampton/Image-To-Graph
+Project Link: https://github.com/ian-hampton/image-to-graph
