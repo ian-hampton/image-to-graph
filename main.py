@@ -15,29 +15,6 @@ EXTENSIONS = {'.png', '.PNG'}
 pytesseract.pytesseract.tesseract_cmd = "C:\\Program Files\\Tesseract-OCR\\tesseract.exe"
 custom_config = r"--psm 8"
 
-def check_pixel(px, mode: str, x: int, y: int) -> bool:
-    """
-    Checks if a pixel is white.
-
-    Params:
-        px: Data from main_image.load().
-        mode (str): Image type.
-        x (int): x-coordinate of pixel.
-        y (int): y-coordinate of pixel.
-    """
-    
-    match mode:
-        case 'RGB':
-            r, g, b = px[x, y]
-            if all(c == 255 for c in (r, g, b)):
-                return True
-        case 'RGBA':
-            r, g, b, a = px[x, y]
-            if all(c == 255 for c in (r, g, b)) and a == 255:
-                return True
-    
-    return False
-
 def generate_node_color(colors: set[tuple], mode: str) -> tuple[tuple, tuple]:
     """
     Generates a unique color for a node.
@@ -85,6 +62,64 @@ def filter_text(text: str) -> str:
 
     return text
 
+def tup_to_hex(color_tuple: tuple) -> str:
+    """
+    Converts RBG or RGBA color to a hexadecimal string.
+    """
+
+    result = None
+    if len(color_tuple) == 3:
+        result = f"{color_tuple[0]:02x}{color_tuple[1]:02x}{color_tuple[2]:02x}"
+    elif len(color_tuple) == 4:
+        result = f"{color_tuple[0]:02x}{color_tuple[1]:02x}{color_tuple[2]:02x}{color_tuple[3]:02x}"
+
+    return result
+
+def is_significant(x: int, y: int, px, border_color: tuple) -> bool:
+    """
+    Checks if a pixel is on the border of a region/node.
+    """
+
+    adjacent_cords = [(x-1, y), (x+1, y), (x, y-1), (x, y+1)]
+
+    for x, y in adjacent_cords:
+        if px[x, y] == border_color:
+            return True
+            
+    return False
+
+def bresenham_circle(x0: int, y0: int, r: int) -> list:
+
+    points = []
+    x = 0
+    y = r
+    d = 3 - 2 * r
+
+    def plot_circle_points(xc, yc, x, y):
+        points.extend([
+            (xc + x, yc + y),
+            (xc - x, yc + y),
+            (xc + x, yc - y),
+            (xc - x, yc - y),
+            (xc + y, yc + x),
+            (xc - y, yc + x),
+            (xc + y, yc - x),
+            (xc - y, yc - x)
+        ])
+
+    plot_circle_points(x0, y0, x, y)
+
+    while x <= y:
+        x += 1
+        if d > 0:
+            y -= 1
+            d += 4 * (x - y) + 10
+        else:
+            d += 4 * x + 6
+        plot_circle_points(x0, y0, x, y)
+
+    return points
+
 def color_map_image(DIRECTORY: str) -> Tuple[set, Image.Image]:
     """
     Identifies all nodes in an image and colors them a unique color.
@@ -109,13 +144,20 @@ def color_map_image(DIRECTORY: str) -> Tuple[set, Image.Image]:
         print("Error: Could not locate map image!")
         sys.exit(1)
 
+    # check image mode
+    match map_image.mode:
+        case 'RGB':
+            white = (255, 255, 255)
+        case 'RGBA':
+            white = (255, 255, 255, 255)
+
     # identify and color nodes
     colors = set()
     width, height = map_image.size
     px = map_image.load()
     for y in range(height):
         for x in range(width):
-            if check_pixel(px, map_image.mode, x, y):
+            if px[x, y] == white:
                 fill_color, border_color = generate_node_color(colors, map_image.mode)
                 ImageDraw.floodfill(map_image, (x, y), fill_color, border_color)
                 colors.add(fill_color)
@@ -236,7 +278,7 @@ def cleanup(text_dict: dict, colors: set, unmatched_colors: set) -> dict:
         if user_choice.lower() not in ["m", "match"]:
             continue
         while True:
-            color = input("Enter BGR color as a comma-separated list: ")
+            color = input("Enter color as a comma-separated list: ")
             try:
                 color = tuple(val.strip() for val in color.split(","))
             except:
@@ -258,6 +300,67 @@ def cleanup(text_dict: dict, colors: set, unmatched_colors: set) -> dict:
     
     return text_dict
 
+def create_graph(text_dict: dict, colored_image: Image.Image) -> dict:
+    """
+    Creates the graph ADT.
+
+    Params:
+        text_dict (dict): Dictionary of text keys and their corresponding info.
+        colored_image (Image): A copy of the map image with uniquely colored regions.
+
+    Returns:
+        dict: Final graph represented as a nested dictionary.
+    """
+
+    # create color to text dict
+    color_to_text_dict = {}
+    for key, value in text_dict.items():
+        for color in value["colors"]:
+            hex_color = tup_to_hex(color)
+            if hex_color is not None:
+                color_to_text_dict[hex_color] = key
+    
+    # create graph dict
+    graph_dict = {}
+    for key in text_dict.keys():
+        graph_dict[key] = {}
+
+    # check image mode
+    match colored_image.mode:
+        case 'RGB':
+            black = (0, 0, 0)
+        case 'RGBA':
+            black = (0, 0, 0, 255)
+
+    # build adjacency map
+    search_radius = 8
+    width, height = colored_image.size
+    px = colored_image.load()
+    
+    for y in range(height):
+        for x in range(width):
+            pixel_color = tup_to_hex(px[x,y])
+            if pixel_color in color_to_text_dict:
+
+                if not is_significant(x, y, px, black):
+                    continue
+                
+                # identify pixels to check
+                points = bresenham_circle(x, y, search_radius)
+                # tba - narrow search
+
+                # perform checks and update graph_dict
+                region_text = color_to_text_dict[pixel_color]
+                for x2, y2 in points:
+                    adjacent_color = tup_to_hex(px[x2, y2])
+                    if adjacent_color == pixel_color:
+                        continue
+                    elif adjacent_color in color_to_text_dict:
+                        adjacent_text = color_to_text_dict[adjacent_color]
+                        graph_dict[region_text][adjacent_text] = True
+
+    return graph_dict
+
 def main():
 
     DIRECTORY = input("Enter absolute filepath to target directory: ")
@@ -277,10 +380,13 @@ def main():
 
     # construct graph
     print(f"[{datetime.datetime.now()}] Constructing graph...")
+    graph_dict = create_graph(text_dict, colored_image)
 
     # save graph
     os.remove(f"{DIRECTORY}/TEMP_MAP.png")
     os.remove(f"{DIRECTORY}/TEMP_RESULTS.json")
+    with open(f"{DIRECTORY}/graph.json", "w") as json_file:
+        json.dump(graph_dict, json_file, indent=4)
     print(f"[{datetime.datetime.now()}] Done!") 
 
 if __name__ == "__main__":
