@@ -319,8 +319,10 @@ def create_graph(text_dict: dict, colored_image: Image.Image) -> dict:
     
     # create graph dict
     graph_dict = {}
-    for key in text_dict.keys():
-        graph_dict[key] = {}
+    for key, value in text_dict.items():
+        graph_dict[key] = {
+            "adjacencyMap": {}
+        }
 
     # check image mode
     match colored_image.mode:
@@ -333,27 +335,28 @@ def create_graph(text_dict: dict, colored_image: Image.Image) -> dict:
     search_radius = 8
     width, height = colored_image.size
     px = colored_image.load()
-    
     for y in range(height):
         for x in range(width):
-            pixel_color = tup_to_hex(px[x,y])
-            if pixel_color in color_to_text_dict:
-
-                if not is_significant(x, y, px, black):
-                    continue
+            
+            node_pixel_color = tup_to_hex(px[x,y])
+            if node_pixel_color not in color_to_text_dict or not is_significant(x, y, px, black):
+                continue
                 
-                # identify pixels to check
-                points = bresenham_circle(x, y, search_radius)
-                # tba - narrow search
-
-                # perform checks and update graph_dict
-                region_text = color_to_text_dict[pixel_color]
-                for x2, y2 in points:
-                    adjacent_color = tup_to_hex(px[x2, y2])
-                    if adjacent_color == pixel_color:
-                        continue
-                    elif adjacent_color in color_to_text_dict:
-                        adjacent_text = color_to_text_dict[adjacent_color]
-                        graph_dict[region_text][adjacent_text] = True
+            # identify pixels to check
+            # tba - narrow search
+            points = bresenham_circle(x, y, search_radius)
+            
+            # check each pixel in points and match the color to adjacent nodes
+            node_text = color_to_text_dict[node_pixel_color]
+            for x2, y2 in points:
+                adjacent_node_color = tup_to_hex(px[x2, y2])
+                if adjacent_node_color in color_to_text_dict and adjacent_node_color != node_pixel_color:
+                    # update graph_dict
+                    adjacent_text = color_to_text_dict[adjacent_node_color]
+                    graph_dict[node_text]["adjacencyMap"][adjacent_text] = True
+    
+    # sort adjacency maps alphabetically
+    for key, value in graph_dict.items():
+        value["adjacencyMap"] = dict(sorted(value["adjacencyMap"].items()))
 
     return graph_dict
