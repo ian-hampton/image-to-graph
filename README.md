@@ -38,7 +38,7 @@ The script will take two images of your map and use them to create a graph, expo
 
 ## Roadmap
 
-- [ ] Add option to change bresenham circle radius.
+- [x] Add option to change bresenham circle radius.
 - [ ] Make the adjacency detection more effecient.
 - [ ] Add additional save options?
 

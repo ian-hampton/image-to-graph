@@ -6,6 +6,7 @@ import datetime
 import functions as itg
 
 DIRECTORY = input("Enter absolute filepath to target directory: ")
+BORDER_THICKNESS = int(input("Enter thickness of borders seperating map regions (in pixels): "))
 
 print(f"[{datetime.datetime.now()}] Coloring map regions...")
 colors, colored_image = itg.color_map_image(DIRECTORY)
@@ -15,14 +16,14 @@ print(f"[{datetime.datetime.now()}] Reading map text...")
 text_dict = itg.detect_text(DIRECTORY)
 
 print(f"[{datetime.datetime.now()}] Identifying regions...")
-text_dict, unmatched_colors = itg.match_text_to_color(text_dict, colors, colored_image)
+unmatched_colors = itg.match_text_to_color(text_dict, colors, colored_image)
 with open(f"{DIRECTORY}/TEMP_RESULTS.json", "w") as json_file:
     json.dump(text_dict, json_file, indent=4)
-text_dict = itg.cleanup(text_dict, colors, unmatched_colors)
+itg.cleanup(text_dict, colors, unmatched_colors)
 
 # construct graph
 print(f"[{datetime.datetime.now()}] Constructing graph...")
-graph_dict = itg.create_graph(text_dict, colored_image)
+graph_dict = itg.create_graph(text_dict, colored_image, BORDER_THICKNESS)
 
 # save graph
 os.remove(f"{DIRECTORY}/TEMP_MAP.png")

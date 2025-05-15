@@ -204,7 +204,7 @@ def detect_text(DIRECTORY: str) -> dict:
 
     return text_dict
 
-def match_text_to_color(text_dict: dict, colors: set, colored_image: Image.Image) ->  Tuple[dict, set]:
+def match_text_to_color(text_dict: dict, colors: set, colored_image: Image.Image) -> set:
     """
     Matches each block of text to a colored region.
 
@@ -231,9 +231,9 @@ def match_text_to_color(text_dict: dict, colors: set, colored_image: Image.Image
 
     unmatched_colors = colors.difference(matched_colors)
 
-    return text_dict, unmatched_colors
+    return unmatched_colors
 
-def cleanup(text_dict: dict, colors: set, unmatched_colors: set) -> dict:
+def cleanup(text_dict: dict, colors: set, unmatched_colors: set) -> None:
     """
     Prompts user to handle stray text and colors.
 
@@ -294,10 +294,8 @@ def cleanup(text_dict: dict, colors: set, unmatched_colors: set) -> dict:
             if region_id in text_dict:
                 text_dict[region_id]["colors"].append(color)
                 break
-    
-    return text_dict
 
-def create_graph(text_dict: dict, colored_image: Image.Image) -> dict:
+def create_graph(text_dict: dict, colored_image: Image.Image, border_thickness: int) -> dict:
     """
     Creates the graph ADT.
 
@@ -332,7 +330,7 @@ def create_graph(text_dict: dict, colored_image: Image.Image) -> dict:
             black = (0, 0, 0, 255)
 
     # build adjacency map
-    search_radius = 8
+    search_radius = border_thickness + 2
     width, height = colored_image.size
     px = colored_image.load()
     for y in range(height):
