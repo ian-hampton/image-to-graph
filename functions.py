@@ -204,7 +204,7 @@ def detect_text(DIRECTORY: str) -> dict:
 
     return text_dict
 
-def match_text_to_color(text_dict: dict, colors: set, colored_image: Image.Image) -> set:
+def match_text_to_color(text_dict: dict, colors: set, colored_image: Image.Image) -> dict:
     """
     Matches each block of text to a colored region.
 
@@ -229,11 +229,25 @@ def match_text_to_color(text_dict: dict, colors: set, colored_image: Image.Image
             text_dict[key]["colors"].append(list(px[x, y]))
             matched_colors.add(px[x, y])
 
+    unmatched_colors_dict = {}
     unmatched_colors = colors.difference(matched_colors)
+    for color in unmatched_colors:
+        _locate_color(color, unmatched_colors_dict, colored_image)
 
-    return unmatched_colors
+    return unmatched_colors_dict
 
-def cleanup(text_dict: dict, colors: set, unmatched_colors: set) -> None:
+def _locate_color(color: Tuple, unmatched_colors_dict: dict, colored_image: Image.Image) -> None:
+    
+    width, height = colored_image.size
+    px = colored_image.load()
+    for y in range(height):
+        for x in range(width):
+            if px[x, y] == color:
+                color = tup_to_hex(color)
+                unmatched_colors_dict[color] = [x, y]
+                return
+
+def cleanup(text_dict: dict, colors: set, unmatched_colors: dict) -> None:
     """
     Prompts user to handle stray text and colors.
 
@@ -285,8 +299,8 @@ def cleanup(text_dict: dict, colors: set, unmatched_colors: set) -> None:
                 break
 
     # handle stray colors
-    for color in unmatched_colors:
-        user_choice = input(f"{color} (S/m): ")
+    for color, cords in unmatched_colors.items():
+        user_choice = input(f"{color} at {cords} (S/m): ")
         if user_choice.lower() not in ["m", "match"]:
             continue
         while True:
