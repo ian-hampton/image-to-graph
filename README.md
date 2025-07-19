@@ -1,6 +1,11 @@
 # About
 
-This script is a work in progress. I wrote it to help me create the graph adts for another project. Currently, it builds the graph adt through image analysis done by OpenCV, Pytesseract, and Pillow. The resulting graph is saved to a JSON file.
+This script generates a complete adjacency map from a map image through image analysis done by OpenCV, Pytesseract, and Pillow. The resulting graph is saved to a JSON file.
+
+Please note that this is a work in progress. I wrote this to assist me with another project.
+
+![](preview.png)
+
 
 ## Getting Started
 
@@ -40,6 +45,7 @@ The script will take two images of your map and use them to create a graph, expo
 
 - [x] Add option to change bresenham circle radius.
 - [ ] Make the adjacency detection more effecient.
+- [ ] Improve text detection to work with a completely transparent background.
 - [ ] Add additional save options?
 
 ## Contact
