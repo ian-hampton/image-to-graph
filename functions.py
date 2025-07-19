@@ -4,20 +4,21 @@ import glob
 import random
 from typing import Tuple
 
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageColor
 import cv2
 import pytesseract
+import numpy as np
 
 EXTENSIONS = {'.png', '.PNG'}
 pytesseract.pytesseract.tesseract_cmd = "C:\\Program Files\\Tesseract-OCR\\tesseract.exe"
 custom_config = r"--psm 8"
 
-def generate_node_color(colors: set[tuple], mode: str) -> tuple[tuple, tuple]:
+def generate_node_color(colors: set[str], mode: str) -> tuple[tuple, tuple]:
     """
     Generates a unique color for a node.
 
     Params:
-        colors (set): Set of RGB/RGBA tuples that have already been chosen.
+        colors (set): Set of RGB/RGBA hex values that have already been chosen.
         mode (str): Image type.
 
     Returns:
@@ -36,7 +37,7 @@ def generate_node_color(colors: set[tuple], mode: str) -> tuple[tuple, tuple]:
                 fill_color.append(255)
                 border_color = (0, 0, 0, 255)
         
-        fill_color = tuple(fill_color)
+        fill_color = tup_to_hex(tuple(fill_color))
         if fill_color not in colors:
             colors.add(fill_color)
             break
@@ -156,7 +157,8 @@ def color_map_image(DIRECTORY: str) -> Tuple[set, Image.Image]:
         for x in range(width):
             if px[x, y] == white:
                 fill_color, border_color = generate_node_color(colors, map_image.mode)
-                ImageDraw.floodfill(map_image, (x, y), fill_color, border_color)
+                rgb_color = ImageColor.getcolor(f"#{fill_color}", map_image.mode)
+                ImageDraw.floodfill(map_image, (x, y), rgb_color, border_color)
                 colors.add(fill_color)
                 px = map_image.load()
 
@@ -204,7 +206,7 @@ def detect_text(DIRECTORY: str) -> dict:
 
     return text_dict
 
-def match_text_to_color(text_dict: dict, colors: set, colored_image: Image.Image) -> dict:
+def match_text_to_color(text_dict: dict, colors: set, colored_image: Image.Image) -> set:
     """
     Matches each block of text to a colored region.
 
@@ -214,9 +216,7 @@ def match_text_to_color(text_dict: dict, colors: set, colored_image: Image.Image
         colored_image (Image): A copy of the map image with uniquely colored regions.
 
     Returns:
-        tuple:
-            dict: Dictionary of text keys and their corresponding info.
-            set: All colors that were not matched to a block of text.
+        set: All colors that were not matched to a block of text.
     """
 
     matched_colors = set()
@@ -225,29 +225,17 @@ def match_text_to_color(text_dict: dict, colors: set, colored_image: Image.Image
     for key, value in text_dict.items():
         x = value["cords"][0]
         y = value["cords"][1]
-        if px[x, y] in colors:
-            text_dict[key]["colors"].append(list(px[x, y]))
-            matched_colors.add(px[x, y])
+        pixel_hex_color = tup_to_hex(px[x, y])
+        if pixel_hex_color in colors:
+            text_dict[key]["colors"] = []
+            text_dict[key]["colors"].append(pixel_hex_color)
+            matched_colors.add(pixel_hex_color)
 
-    unmatched_colors_dict = {}
     unmatched_colors = colors.difference(matched_colors)
-    for color in unmatched_colors:
-        _locate_color(color, unmatched_colors_dict, colored_image)
 
-    return unmatched_colors_dict
+    return unmatched_colors
 
-def _locate_color(color: Tuple, unmatched_colors_dict: dict, colored_image: Image.Image) -> None:
-    
-    width, height = colored_image.size
-    px = colored_image.load()
-    for y in range(height):
-        for x in range(width):
-            if px[x, y] == color:
-                color = tup_to_hex(color)
-                unmatched_colors_dict[color] = [x, y]
-                return
-
-def cleanup(text_dict: dict, colors: set, unmatched_colors: dict) -> None:
+def cleanup(text_dict: dict, colors: set, unmatched_colors: set) -> None:
     """
     Prompts user to handle stray text and colors.
 
@@ -289,18 +277,16 @@ def cleanup(text_dict: dict, colors: set, unmatched_colors: dict) -> None:
         if user_choice.lower() not in ["m", "match"]:
             continue
         while True:
-            color = input("Enter color as a comma-separated list: ")
-            try:
-                color = tuple(val.strip() for val in color.split(","))
-            except:
-                continue
+            color = input("Enter color as a hex value: ").lower()
             if color in colors:
-                text_dict[region_id]["colors"].append(color)
+                text_dict[text]["colors"].append(color)
+                if color in unmatched_colors:
+                    unmatched_colors.remove(color)
                 break
 
     # handle stray colors
-    for color, cords in unmatched_colors.items():
-        user_choice = input(f"{color} at {cords} (S/m): ")
+    for color in unmatched_colors:
+        user_choice = input(f"{color} (S/m): ")
         if user_choice.lower() not in ["m", "match"]:
             continue
         while True:
@@ -324,8 +310,7 @@ def create_graph(text_dict: dict, colored_image: Image.Image, border_thickness: 
     # create color to text dict
     color_to_text_dict = {}
     for key, value in text_dict.items():
-        for color in value["colors"]:
-            hex_color = tup_to_hex(color)
+        for hex_color in value["colors"]:
             if hex_color is not None:
                 color_to_text_dict[hex_color] = key
     
@@ -355,7 +340,7 @@ def create_graph(text_dict: dict, colored_image: Image.Image, border_thickness: 
                 continue
                 
             # identify pixels to check
-            # tba - narrow search
+            # TODO: narrow search
             points = bresenham_circle(x, y, search_radius)
             
             # check each pixel in points and match the color to adjacent nodes
